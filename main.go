@@ -17,18 +17,18 @@ func init() {
 func main() {
 
 	var (
-		cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to file")
-		memprofile  = flag.String("memprofile", "", "write memory profile to file")
+		cpuProfileFilePath = flag.String("cpuProfile", "", "write cpu profile to file")
+		memProfileFilePath = flag.String("memProfile", "", "write memory profile to file")
 	)
 	flag.Parse()
 
 	// CPU profile
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
+	if *cpuProfileFilePath != "" {
+		f, err := os.Create(*cpuProfileFilePath)
 		if err != nil {
 			log.Fatal("could not create CPU profile: ", err)
 		}
-		defer f.Close() // error handling omitted for example
+		defer func() { _ = f.Close() }() // error handling omitted intentionally
 		if err := pprof.StartCPUProfile(f); err != nil {
 			log.Fatal("could not start CPU profile: ", err)
 		}
@@ -36,19 +36,23 @@ func main() {
 	}
 
 	// Memory profile
-	if *memprofile != "" {
-		f, err := os.Create(*memprofile)
+	if *memProfileFilePath != "" {
+		f, err := os.Create(*memProfileFilePath)
 		if err != nil {
 			log.Fatal("could not create memory profile: ", err)
 		}
 		defer func() {
-			defer f.Close() // error handling omitted for example
-			runtime.GC() // get up-to-date statistics
+			defer func() { _ = f.Close() }() // error handling omitted intentionally
+			runtime.GC()                     // get up-to-date statistics
 			if err := pprof.WriteHeapProfile(f); err != nil {
 				log.Fatal("could not write memory profile: ", err)
 			}
 		}()
 	}
+
+	///////////////////////
+	// Start of the program
+	///////////////////////
 	var cpu CPU
 	AddressSpace := make(Memory, MaxMemorySize) // Allocate addressable memory space
 
@@ -58,14 +62,21 @@ func main() {
 
 	// ROM program
 	prg := [...]Byte{
-		NOP.code,       // No operation (pause 2 cycles)
-		SEC.code,       // Set Carry flag
-		SEI.code,       // Set InterruptDisabled flag
-		CLI.code,       // Clear InterruptDisabled flag
-		CLC.code,       // Clear Carry flag
-		LDA.code, 0x42, // Load 0x42 -> A register
-		AND.code, 0x0,  // AND value in A with 0x0 (side effect: set Zero flag)
-		HLT.code,       // Halt CPU
+		NOP.code, // No operation (pause 2 cycles)
+		// Test flag set/clear commands
+		SEC.code, // Set Carry flag
+		SEI.code, // Set InterruptDisabled flag
+		CLI.code, // Clear InterruptDisabled flag
+		CLC.code, // Clear Carry flag
+		// Test load into Accumulator
+		LDA.code, 0x42, // Load 0x42 -> A register (immediate mode)
+		// Test logical AND command
+		AND.code, 0x0, // AND value in A with 0x0 (side effect: set Zero flag)
+		// Pauses via NOP operations
+		NOP.code, // No operation (pause 2 cycles)
+		NOP.code, // No operation (pause 2 cycles)
+		NOP.code, // No operation (pause 2 cycles)
+		HLT.code, // Halt CPU
 	}
 
 	// Load program at addr 0x0200
@@ -176,10 +187,12 @@ func (cpu *CPU) setRegA(val Byte) {
 	}
 }
 
+//goland:noinspection GoUnhandledErrorResult
 func (cpu CPU) DumpState() {
-	//fmt.Print("\033[H\033[2J") // clear screen
+	fmt.Print("\033[H\033[2J") // clear screen
 	fmt.Fprintf(os.Stderr, "===============================\n")
-	fmt.Fprintf(os.Stderr, "====       CPU STATE       ====\n")
+	fmt.Fprintf(os.Stderr, "==         CPU STATE         ==\n")
+	fmt.Fprintf(os.Stderr, "==    (0x%08X cycles)    ==\n", cpu.cycleCounter)
 	fmt.Fprintf(os.Stderr, "===============================\n")
 	fmt.Fprintf(os.Stderr, "==   Flags: C|Z|I|D|B|O|N    ==\n")
 	fmt.Fprintf(os.Stderr, "==          %c|%c|%c|%c|%c|%c|%c    ==\n",
@@ -331,11 +344,3 @@ func plural(n int, name string) string {
 
 	return fmt.Sprintf("%d %s%s", n, name, suf)
 }
-
-// Helper to handle errors
-func errHandle(err error, msg string) {
-	if err != nil {
-		log.Fatalf(msg+": %v", err)
-	}
-}
-
