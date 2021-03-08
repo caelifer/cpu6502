@@ -116,20 +116,21 @@ type CPU struct {
 }
 
 func (cpu *CPU) FetchAndExecuteLoop(mem Memory) {
-	// Use PC to fetch addr of the RST vector
+	// Use fetch addr of the ROM program
 	lo := cpu.FetchNextInstruction(mem)
 	cpu.DumpState()
 	hi := cpu.FetchNextInstruction(mem)
 	cpu.DumpState()
+	// Start executing ROM program
 	cpu.PC = (Word(hi) << 8) | Word(lo)
-	log.Printf("Set PC to RST vector address: 0x%04X", cpu.PC)
+	log.Printf("Set PC to ROM address: 0x%04X", cpu.PC)
 
 	// Execute forever
 	for {
-		inst := cpu.FetchNextInstruction(mem)
-		op := cpu.Decode(inst)
-		cpu.Eval(op, mem)
-		cpu.DumpState()
+		mCode := cpu.FetchNextInstruction(mem) // Get machine code
+		cmd := cpu.Decode(mCode)               // Decode machine code instruction
+		cpu.Eval(cmd, mem)                     // Evaluate decoded instruction
+		cpu.DumpState()                        // Display CPU state
 	}
 }
 
@@ -150,7 +151,7 @@ func (cpu *CPU) FetchNextInstruction(mem Memory) Byte {
 
 func (cpu *CPU) Decode(instr Byte) OpCode {
 	// Use look-up table to figure out OpCode based on the instruction
-	if op, ok := isa[instr]; ok {
+	if op, ok := ISATable[instr]; ok {
 		log.Printf("Decoded instruction 0x%02X as %v", instr, op.mnemonic)
 		return op
 	}
@@ -189,7 +190,7 @@ func (cpu *CPU) setRegA(val Byte) {
 
 //goland:noinspection GoUnhandledErrorResult
 func (cpu CPU) DumpState() {
-	fmt.Print("\033[H\033[2J") // clear screen
+	//fmt.Print("\033[H\033[2J") // clear screen
 	fmt.Fprintf(os.Stderr, "===============================\n")
 	fmt.Fprintf(os.Stderr, "==         CPU STATE         ==\n")
 	fmt.Fprintf(os.Stderr, "==    (0x%08X cycles)    ==\n", cpu.cycleCounter)
@@ -323,7 +324,8 @@ var (
 	}}
 )
 
-var isa = map[Byte]OpCode{
+// Instruction Set Architecture lookup table
+var ISATable = map[Byte]OpCode{
 	HLT.code: HLT,
 	NOP.code: NOP,
 	CLC.code: CLC,
