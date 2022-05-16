@@ -54,14 +54,14 @@ func main() {
 	// Start of the program
 	///////////////////////
 	var cpu CPU
-	AddressSpace := make(Memory, MaxMemorySize) // Allocate addressable memory space
+	AddressSpace := make(Memory, TotalMemorySize) // Allocate addressable memory space
 
 	// Load reset vector
 	AddressSpace[0xfffc] = 0x00 // lo byte address
 	AddressSpace[0xfffd] = 0x02 // hi byte address
 
 	// ROM program
-	prg := [...]Byte{
+	RomBios := []Byte{
 		NOP.code, // No operation (pause 2 cycles)
 		// Test flag set/clear commands
 		SEC.code, // Set Carry flag
@@ -80,23 +80,23 @@ func main() {
 	}
 
 	// Load program at addr 0x0200
-	copy(AddressSpace[0x0200:], prg[:])
+	copy(AddressSpace[0x0200:], RomBios)
 
 	// Reset processor
 	cpu.Reset()
 	cpu.DumpState()
 
 	// Start Fetch/Execute loop
-	cpu.FetchAndExecuteLoop(AddressSpace[:])
+	cpu.FetchAndExecuteLoop(AddressSpace)
 }
 
 type Byte uint8
 type Word uint16
 
 const (
-	MaxMemorySize = 1 << 16                // Memory size: 64K 8-bit bytes
-	CycleTick     = 250 * time.Millisecond // CPU frequency: 4Hz
-	// CycleTick = 1 * time.Microsecond // CPU frequency: 1MHz
+	TotalMemorySize = 1 << 16                // Memory size: 64K 8-bit bytes
+	CycleTick       = 250 * time.Millisecond // CPU frequency: 4Hz
+	//CycleTick = 1 * time.Microsecond // CPU frequency: 1MHz
 )
 
 type Memory = []Byte
@@ -175,7 +175,7 @@ func (cpu *CPU) Reset() {
 	// Set stack pointer
 	cpu.SP = 0x01ff
 
-	// Set address for the reset vecor
+	// Set address for the reset vector
 	cpu.PC = 0xfffc
 }
 
@@ -190,7 +190,7 @@ func (cpu *CPU) setRegA(val Byte) {
 
 //goland:noinspection GoUnhandledErrorResult
 func (cpu CPU) DumpState() {
-	//fmt.Print("\033[H\033[2J") // clear screen
+	clearScreen() // clear screen
 	fmt.Fprintf(os.Stderr, "===============================\n")
 	fmt.Fprintf(os.Stderr, "==         CPU STATE         ==\n")
 	fmt.Fprintf(os.Stderr, "==    (0x%08X cycles)    ==\n", cpu.cycleCounter)
@@ -206,6 +206,11 @@ func (cpu CPU) DumpState() {
 	fmt.Fprintf(os.Stderr, "==       X:        0x%04X    ==\n", cpu.RegX)
 	fmt.Fprintf(os.Stderr, "==       Y:        0x%04X    ==\n", cpu.RegY)
 	fmt.Fprintf(os.Stderr, "===============================\n")
+}
+
+// clearScreen - clear screens using terminal commands.
+func clearScreen() (int, error) {
+	return fmt.Print("\033[H\033[2J")
 }
 
 func (cpu CPU) checkFlag(flag Word) rune {
@@ -324,7 +329,7 @@ var (
 	}}
 )
 
-// Instruction Set Architecture lookup table
+// ISATable - Instruction Set Architecture (ISA) lookup table
 var ISATable = map[Byte]OpCode{
 	HLT.code: HLT,
 	NOP.code: NOP,
@@ -343,6 +348,5 @@ func plural(n int, name string) string {
 	if n != 1 {
 		suf = "s"
 	}
-
 	return fmt.Sprintf("%d %s%s", n, name, suf)
 }
